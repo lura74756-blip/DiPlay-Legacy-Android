@@ -155,6 +155,8 @@ class CarPlayVpnService : VpnService() {
 
     fun isAttached(): Boolean = active.get() && attachment != null
 
+    fun boundPort(): Int? = attachment?.config?.port
+
     override fun onDestroy() {
         detach()
         super.onDestroy()
@@ -164,9 +166,15 @@ class CarPlayVpnService : VpnService() {
         generation: Int,
         replacement: AirPlayAttachment,
     ) {
-        val server = ServerSocket()
-        server.bind(InetSocketAddress(replacement.address, replacement.config.port))
-        attachment = replacement
+        val server = AirPlayPortSelector.bind(
+            address = replacement.address,
+            preferredPort = replacement.config.port,
+        ) { busyPort, boundPort ->
+            Log.w(TAG, "AirPlay port $busyPort is in use; listening on $boundPort instead")
+        }
+        attachment = replacement.copy(
+            config = replacement.config.copy(port = server.localPort),
+        )
         serverSocket = server
         Thread(
             { acceptLoop(generation, server) },
